@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard | Green Sparrow</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sb" id="sb">
+    <div class="brand"><img src="../assets/logo.png" alt="" onerror="this.remove()">Green Sparrow</div>
+    <nav class="nv" id="nv" aria-label="Sections"></nav>
+    <div class="me">
+      <b id="who">…</b>
+      <div class="acts"><a href="../index.html" target="_blank" rel="noopener">View website ↗</a><button id="out" type="button">Sign out</button></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <button class="burger" id="bg" type="button" aria-label="Menu"><svg class="i" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      <h1 id="ttl">Overview</h1>
+      <span class="live" id="live">Connecting…</span>
+      <button class="btn ghost sm" id="csv" type="button"><svg class="i" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Export CSV</button>
+      <div class="srch" id="srch"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="q" placeholder="Search name, email, phone, message…" autocomplete="off"></div>
+    </div>
+
+    <div id="banner" class="note"></div>
+
+    <section id="v-overview">
+      <div class="stats" id="stats"></div>
+      <div class="grid2">
+        <div class="card"><h3>Submissions, last 14 days <small>all forms</small></h3><div class="chartbox"><canvas id="c1"></canvas></div></div>
+        <div class="card"><h3>Services people ask for</h3><div class="chartbox"><canvas id="c2"></canvas></div></div>
+      </div>
+      <div class="grid3">
+        <div class="card"><h3>Lead pipeline <small>enquiries · consultations · messages</small></h3><div class="funnel" id="funnel"></div></div>
+        <div class="card"><h3>Needs a reply <small>new for over 24 hrs</small></h3><div class="att" id="att"></div></div>
+        <div class="card"><h3>Recent activity</h3><div class="act" id="act"></div></div>
+      </div>
+    </section>
+
+    <section id="v-list" class="hide">
+      <div class="bar-t">
+        <div class="chips" id="chips"></div>
+        <select class="sel" id="sort" aria-label="Sort"><option value="new">Newest first</option><option value="old">Oldest first</option></select>
+      </div>
+      <div class="card tw">
+        <table><thead id="th"></thead><tbody id="tb"></tbody></table>
+        <div id="em" class="empty hide"><b>🌿</b><span id="emt">Nothing here yet.</span></div>
+        <div id="more" class="more hide"><button class="btn ghost sm" id="moreb" type="button">Show more</button></div>
+      </div>
+    </section>
+
+    <section id="v-health" class="hide">
+      <div class="card"><h3>Connection check <small>what this dashboard can reach right now</small></h3><div class="chk" id="chk"></div></div>
+    </section>
+  </main>
+</div>
+
+<div class="dr-bg" id="bgd"></div>
+<aside class="dr" id="dr" aria-hidden="true">
+  <header><div class="av" id="dav"></div><h3 id="dn"></h3><button class="x" id="dx" type="button" aria-label="Close">×</button></header>
+  <div class="bdy" id="db"></div>
+  <footer id="df"></footer>
+</aside>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="../firebase-config.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (i) { return document.getElementById(i); };
+
+  /* ------------------------------------------------------------------ setup */
+  if (typeof GS_CONFIGURED !== 'function' || !GS_CONFIGURED()) { location.replace('login.html'); return; }
+  document.documentElement.style.visibility = 'hidden';   // hidden until the admin check passes
+  firebase.initializeApp(GS_FIREBASE);
+  var auth = firebase.auth(), db = firebase.firestore();
+
+  var ICON = {
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+    inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1z"/>',
+    cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+    plug: '<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a6 6 0 0 1-12 0V8z"/>'
+  };
+  function ic(n) { return '<svg class="i" viewBox="0 0 24 24">' + ICON[n] + '</svg>'; }
+
+  var COLS = [
+    { k: 'enquiries', n: 'Project Enquiries', one: 'enquiry', ic: 'inbox', c: '#678c3b',
+      cols: ['Name', 'Contact', 'Needs', 'Budget', 'Received', 'Status'],
+      row: function (d) { return [nm(d, d.company), ct(d), esc((d.services || '').split(', ').slice(0, 2).join(', ') || '-'), esc(d.budget || '-'), ago(d), st(d)]; } },
+    { k: 'consultations', n: 'Consultations', one: 'consultation', ic: 'cal', c: '#d99a1f',
+      cols: ['Name', 'Topic', 'Meeting', 'Mode', 'Received', 'Status'],
+      row: function (d) { return [nm(d, d.phone), esc(d.topic || '-'), esc(d.date || '-') + '<small>' + esc(d.time || '') + '</small>', esc(d.mode || '-'), ago(d), st(d)]; } },
+    { k: 'messages', n: 'Contact Messages', one: 'message', ic: 'msg', c: '#df561f',
+      cols: ['Name', 'Contact', 'Service', 'Message', 'Received', 'Status'],
+      row: function (d) { var m = d.message || ''; return [nm(d), ct(d), esc(d.service || '-'), esc(m.slice(0, 60)) + (m.length > 60 ? '…' : ''), ago(d), st(d)]; } },
+    { k: 'subscribers', n: 'Subscribers', one: 'subscriber', ic: 'mail', c: '#2c3e2f',
+      cols: ['Email', 'Signed up from', 'Received', 'Status'],
+      row: function (d) { return ['<div class="nm"><div class="av">' + esc((d.email || '?')[0].toUpperCase()) + '</div>' + esc(d.email) + '</div>', esc(d.page || '-'), ago(d), st(d)]; } }
+  ];
+  var BYK = {}; COLS.forEach(function (c) { BYK[c.k] = c; });
+  var LEADS = ['enquiries', 'consultations', 'messages'];
+  var STATUSES = ['new', 'contacted', 'won', 'closed'];
+  var SCOL = { 'new': '#df561f', contacted: '#c98a12', won: '#4f8a2b', closed: '#7b877d' };
+  var PAGE = 50;
+
+  var data = {}, health = { admin: null, cols: {} }, unsubs = [], user = null;
+  COLS.forEach(function (c) { data[c.k] = []; });
+  var cur = 'overview', flt = 'all', sortDir = 'new', limit = PAGE, openDoc = null, ch1, ch2, raf = 0, noteTimer = 0;
+
+  /* ---------------------------------------------------------------- helpers */
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function ts(d) { var t = d.createdAt; return t && t.toDate ? t.toDate() : (t ? new Date(t) : new Date()); }
+  function ago(d) {
+    var s = (Date.now() - ts(d)) / 1000;
+    if (s < 60) return 'Just now';
+    if (s < 3600) return Math.floor(s / 60) + ' min ago';
+    if (s < 86400) return Math.floor(s / 3600) + ' hr ago';
+    return ts(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: ts(d).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+  }
+  function status(d) { return STATUSES.indexOf(d.status) > -1 ? d.status : 'new'; }
+  function st(d) { return '<span class="pill s-' + status(d) + '">' + status(d) + '</span>'; }
+  function nm(d, sub) { return '<div class="nm"><div class="av">' + esc((d.name || '?')[0].toUpperCase()) + '</div><div>' + esc(d.name || '(no name)') + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div></div>'; }
+  function ct(d) { return esc(d.email || '') + '<small>' + esc(d.phone || '') + '</small>'; }
+  function toast(t) { var e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(function () { e.classList.remove('on'); }, 2600); }
+  function newCount(k) { return data[k].filter(function (d) { return status(d) === 'new'; }).length; }
+  function allItems() {
+    var a = [];
+    COLS.forEach(function (c) { data[c.k].forEach(function (d) { a.push({ c: c, d: d }); }); });
+    return a.sort(function (x, y) { return ts(y.d) - ts(x.d); });
+  }
+  function human(k) { return k.replace(/([A-Z])/g, ' $1').replace(/^./, function (m) { return m.toUpperCase(); }); }
+  function schedule() { if (!raf) raf = requestAnimationFrame(function () { raf = 0; render(); }); }
+
+  /* ------------------------------------------------------------- navigation */
+  function nav() {
+    var items = [{ k: 'overview', n: 'Overview', ic: 'grid' }].concat(COLS, [{ k: 'sep' }, { k: 'health', n: 'Connection check', ic: 'plug' }]);
+    $('nv').innerHTML = items.map(function (t) {
+      if (t.k === 'sep') return '<div class="sep"></div>';
+      var n = BYK[t.k] ? newCount(t.k) : 0;
+      return '<button type="button" data-k="' + t.k + '" class="' + (t.k === cur ? 'on' : '') + '">' + ic(t.ic) + t.n + (n ? '<span class="bd">' + n + '</span>' : '') + '</button>';
+    }).join('');
+    var total = COLS.reduce(function (s, c) { return s + newCount(c.k); }, 0);
+    document.title = (total ? '(' + total + ') ' : '') + 'Dashboard | Green Sparrow';
+  }
+  $('nv').onclick = function (e) { var b = e.target.closest('button'); if (b) go(b.dataset.k); };
+  function go(k) {
+    cur = k; flt = 'all'; limit = PAGE; $('q').value = '';
+    $('sb').classList.remove('on'); closeDrawer(); render();
+    window.scrollTo(0, 0);
+  }
+  $('bg').onclick = function () { $('sb').classList.toggle('on'); };
+
+  function render() {
+    nav();
+    var meta = BYK[cur];
+    $('ttl').textContent = meta ? meta.n : (cur === 'health' ? 'Connection check' : 'Overview');
+    $('v-overview').classList.toggle('hide', cur !== 'overview');
+    $('v-list').classList.toggle('hide', !meta);
+    $('v-health').classList.toggle('hide', cur !== 'health');
+    $('srch').classList.toggle('hide', !meta);
+    $('csv').classList.toggle('hide', !meta);
+    if (cur === 'overview') overview(); else if (meta) list(meta); else healthView();
+    banner();
+  }
+
+  /* ----------------------------------------------------------------- banner */
+  function banner() {
+    var bad = Object.keys(health.cols).filter(function (k) { return health.cols[k].err; });
+    var el = $('banner');
+    if (!bad.length) { el.className = 'note'; el.innerHTML = ''; return; }
+    var code = health.cols[bad[0]].err;
+    el.className = 'note on err';
+    el.innerHTML = '<b>Could not read: ' + esc(bad.join(', ')) + '</b> [' + esc(code) + '].<br>' +
+      (code === 'permission-denied'
+        ? 'Publish the contents of <code>firestore.rules</code> in Firebase Console → Firestore Database → Rules, and check that your user has a document in the <code>admins</code> collection.'
+        : 'Check your internet connection and that the Firestore database exists.') +
+      ' <a class="lnk" href="#" id="bn-h">Open connection check →</a>';
+    var l = $('bn-h'); if (l) l.onclick = function (e) { e.preventDefault(); go('health'); };
+  }
+
+  /* --------------------------------------------------------------- overview */
+  function overview() {
+    var now = new Date(), d7 = new Date(now - 7 * 864e5), d14 = new Date(now - 14 * 864e5);
+    $('stats').innerHTML = COLS.map(function (c) {
+      var a = data[c.k], last = a.filter(function (d) { return ts(d) >= d7; }).length,
+          prev = a.filter(function (d) { var t = ts(d); return t >= d14 && t < d7; }).length,
+          diff = last - prev, dl = (last || prev) ? '<span class="dl ' + (diff >= 0 ? 'up' : 'dn') + '">' + (diff >= 0 ? '▲ ' : '▼ ') + Math.abs(diff) + ' vs prior week</span>' : '';
+      return '<button type="button" class="st" style="--c:' + c.c + '" data-go="' + c.k + '"><div class="ico">' + ic(c.ic) + '</div><b>' + a.length + '</b><span>' + c.n + '</span><em>' + newCount(c.k) + ' new</em>' + dl + '</button>';
+    }).join('');
+
+    // 14-day stacked chart
+    var days = [], i;
+    for (i = 13; i >= 0; i--) { var d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i); days.push(d); }
+    function bucket(k) {
+      return days.map(function (day) { var e = new Date(day); e.setDate(e.getDate() + 1); return data[k].filter(function (x) { var t = ts(x); return t >= day && t < e; }).length; });
+    }
+    // services chart
+    var sv = {};
+    data.enquiries.forEach(function (d) { (d.services || '').split(', ').forEach(function (s) { if (s) sv[s] = (sv[s] || 0) + 1; }); });
+    data.consultations.forEach(function (d) { if (d.topic) sv[d.topic] = (sv[d.topic] || 0) + 1; });
+    data.messages.forEach(function (d) { if (d.service) sv[d.service] = (sv[d.service] || 0) + 1; });
+    var keys = Object.keys(sv).sort(function (a, b) { return sv[b] - sv[a]; }).slice(0, 6);
+
+    if (ch1) { ch1.destroy(); ch1 = null; } if (ch2) { ch2.destroy(); ch2 = null; }
+    if (window.Chart) {
+      Chart.defaults.font.family = 'Inter, sans-serif';
+      ch1 = new Chart($('c1'), {
+        type: 'bar',
+        data: { labels: days.map(function (d) { return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); }),
+          datasets: COLS.map(function (c) { return { label: c.n, data: bucket(c.k), backgroundColor: c.c, borderRadius: 4, borderSkipped: false }; }) },
+        options: { maintainAspectRatio: false, animation: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true } } },
+          scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#eee' } } } }
+      });
+      if (keys.length) {
+        ch2 = new Chart($('c2'), {
+          type: 'doughnut',
+          data: { labels: keys, datasets: [{ data: keys.map(function (k) { return sv[k]; }), backgroundColor: ['#678c3b', '#f4b041', '#df561f', '#2c3e2f', '#a5c27a', '#e8d5a3'], borderWidth: 3, borderColor: '#fff' }] },
+          options: { maintainAspectRatio: false, animation: false, cutout: '64%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { size: 11 } } } } }
+        });
+      }
+    }
+
+    // pipeline
+    var leads = []; LEADS.forEach(function (k) { leads = leads.concat(data[k]); });
+    var max = Math.max(1, leads.length);
+    $('funnel').innerHTML = STATUSES.map(function (s) {
+      var n = leads.filter(function (d) { return status(d) === s; }).length;
+      return '<div class="fr" style="--c:' + SCOL[s] + '"><span style="text-transform:capitalize">' + s + '</span><div class="bar"><i style="width:' + (n / max * 100) + '%"></i></div><span class="n">' + n + '</span></div>';
+    }).join('');
+
+    // needs reply
+    var stale = allItems().filter(function (x) { return LEADS.indexOf(x.c.k) > -1 && status(x.d) === 'new' && Date.now() - ts(x.d) > 864e5; }).reverse().slice(0, 6);
+    $('att').innerHTML = stale.map(function (x) { return item(x); }).join('') || '<div class="empty" style="padding:30px 10px"><b>🎉</b>You are all caught up.</div>';
+
+    // recent
+    $('act').innerHTML = allItems().slice(0, 7).map(function (x) { return item(x); }).join('') || '<div class="empty" style="padding:30px 10px"><b>🌿</b>No activity yet. Submit a form on the website to test.</div>';
+  }
+  function item(x) {
+    var d = x.d, who = d.name || d.email || '?', sub = d.topic || d.service || (d.services || '').split(', ')[0] || d.page || '';
+    return '<div data-o="' + x.c.k + '" data-id="' + esc(d.id) + '"><div class="av" style="background:' + x.c.c + '">' + esc(who[0].toUpperCase()) + '</div><div class="tx">' + esc(who) + '<small>' + x.c.n + (sub ? ' · ' + esc(sub) : '') + '</small></div><em>' + ago(d) + '</em></div>';
+  }
+  document.addEventListener('click', function (e) {
+    var g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
+    var o = e.target.closest('[data-o]'); if (o) openItem(o.dataset.o, o.dataset.id);
+  });
+
+  /* ------------------------------------------------------------------- list */
+  function rows(c) {
+    var q = $('q').value.trim().toLowerCase();
+    var r = data[c.k].filter(function (d) {
+      if (flt !== 'all' && status(d) !== flt) return false;
+      if (!q) return true;
+      return Object.keys(d).some(function (k) { return k !== 'id' && k !== 'createdAt' && String(d[k]).toLowerCase().indexOf(q) > -1; });
+    });
+    if (sortDir === 'old') r = r.slice().reverse();
+    return r;
+  }
+  function list(c) {
+    var counts = { all: data[c.k].length };
+    STATUSES.forEach(function (s) { counts[s] = data[c.k].filter(function (d) { return status(d) === s; }).length; });
+    $('chips').innerHTML = ['all'].concat(STATUSES).map(function (s) {
+      return '<button type="button" class="chip ' + (s === flt ? 'on' : '') + '" data-s="' + s + '">' + s[0].toUpperCase() + s.slice(1) + '<b>' + counts[s] + '</b></button>';
+    }).join('');
+    $('th').innerHTML = '<tr>' + c.cols.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr>';
+    var r = rows(c), shown = r.slice(0, limit);
+    $('em').classList.toggle('hide', r.length > 0);
+    $('emt').textContent = data[c.k].length ? 'No results match your filters.' : 'Nothing here yet. New ' + c.n.toLowerCase() + ' from the website will appear instantly.';
+    $('more').classList.toggle('hide', r.length <= limit);
+    $('tb').innerHTML = shown.map(function (d) {
+      return '<tr data-o="' + c.k + '" data-id="' + esc(d.id) + '" class="' + (status(d) === 'new' ? 'unread' : '') + '">' + c.row(d).map(function (x) { return '<td>' + x + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    $('sort').value = sortDir;
+  }
+  $('chips').onclick = function (e) { var b = e.target.closest('button'); if (b) { flt = b.dataset.s; limit = PAGE; render(); } };
+  $('sort').onchange = function () { sortDir = this.value; render(); };
+  $('moreb').onclick = function () { limit += PAGE; render(); };
+  $('q').oninput = function () { limit = PAGE; render(); };
+
+  /* ----------------------------------------------------------------- drawer */
+  var HIDE = { id: 1, createdAt: 1, updatedAt: 1, status: 1, form: 1, note: 1 };
+  function find(k, id) { return data[k].filter(function (d) { return d.id === id; })[0]; }
+  function openItem(k, id) {
+    var d = find(k, id); if (!d) return;
+    openDoc = { k: k, id: id };
+    var who = d.name || d.email || '?';
+    $('dav').textContent = who[0].toUpperCase();
+    $('dav').style.background = BYK[k].c;
+    $('dn').innerHTML = esc(who) + '<small>' + esc(d.form || BYK[k].one) + ' · ' + esc(ts(d).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })) + '</small>';
+    var seg = k === 'subscribers' ? '' : '<div class="seg">' + STATUSES.map(function (s) {
+      return '<button type="button" data-st="' + s + '" class="s-' + s + (s === status(d) ? ' on' : '') + '">' + s + '</button>';
+    }).join('') + '</div>';
+    var fields = Object.keys(d).filter(function (x) { return !HIDE[x] && d[x] !== '' && d[x] != null; }).map(function (x) {
+      return '<div class="kv"><span>' + esc(human(x)) + '</span><p>' + esc(d[x]) + '</p></div>';
+    }).join('');
+    $('db').innerHTML = seg + fields +
+      '<div class="kv" style="border:0"><span>Internal note (only you see this)</span><textarea id="note" placeholder="e.g. Called on Monday, sending quote…">' + esc(d.note || '') + '</textarea><div class="hint" id="nh"></div></div>';
+    var wa = (d.phone || '').replace(/\D/g, '');
+    if (wa.length === 11 && wa[0] === '0') wa = wa.slice(1);
+    if (wa.length === 10) wa = '91' + wa;
+    $('df').innerHTML =
+      (d.email ? '<a class="btn sm" href="mailto:' + esc(d.email) + '">Email</a>' : '') +
+      (wa.length >= 11 ? '<a class="btn sm ghost" target="_blank" rel="noopener" href="https://wa.me/' + wa + '">WhatsApp</a>' : '') +
+      (d.phone ? '<a class="btn sm ghost" href="tel:' + esc(d.phone) + '">Call</a>' : '') +
+      '<button class="btn sm red" id="del" type="button" style="margin-left:auto">Delete</button>';
+    $('dr').classList.add('on'); $('dr').setAttribute('aria-hidden', 'false'); $('bgd').classList.add('on');
+    $('del').onclick = remove;
+    $('note').oninput = function () { clearTimeout(noteTimer); $('nh').textContent = 'Saving…'; noteTimer = setTimeout(saveNote, 700); };
+    $('note').onblur = function () { if (noteTimer) { clearTimeout(noteTimer); saveNote(); } };
+  }
+  function closeDrawer() {
+    if (noteTimer && openDoc) { clearTimeout(noteTimer); saveNote(); }
+    openDoc = null; $('dr').classList.remove('on'); $('dr').setAttribute('aria-hidden', 'true'); $('bgd').classList.remove('on');
+  }
+  $('dx').onclick = $('bgd').onclick = closeDrawer;
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDrawer(); });
+
+  $('db').onclick = function (e) {
+    var b = e.target.closest('[data-st]'); if (!b || !openDoc) return;
+    setStatus(b.dataset.st);
+  };
+  function setStatus(s) {
+    var o = openDoc, d = o && find(o.k, o.id); if (!d || status(d) === s) return;
+    var prev = d.status; d.status = s;
+    [].forEach.call($('db').querySelectorAll('[data-st]'), function (x) { x.classList.toggle('on', x.dataset.st === s); });
+    render();
+    db.collection(o.k).doc(o.id).update({ status: s, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+      .then(function () { toast('Marked as ' + s); })
+      .catch(function (err) { d.status = prev; render(); toast('Could not update: ' + (err.code || 'error')); console.error(err); });
+  }
+  function saveNote() {
+    noteTimer = 0;
+    var o = openDoc, d = o && find(o.k, o.id), t = $('note'); if (!d || !t) return;
+    var v = t.value.slice(0, 2000); d.note = v;
+    db.collection(o.k).doc(o.id).update({ note: v, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+      .then(function () { var h = $('nh'); if (h) h.textContent = 'Saved'; })
+      .catch(function (err) { var h = $('nh'); if (h) h.textContent = 'Could not save note [' + (err.code || 'error') + ']'; });
+  }
+  function remove() {
+    var o = openDoc; if (!o || !confirm('Delete this entry permanently? This cannot be undone.')) return;
+    clearTimeout(noteTimer); noteTimer = 0;
+    db.collection(o.k).doc(o.id).delete()
+      .then(function () { toast('Deleted'); })
+      .catch(function (err) { toast('Could not delete: ' + (err.code || 'error')); console.error(err); });
+    closeDrawer();
+  }
+
+  /* -------------------------------------------------------------------- CSV */
+  $('csv').onclick = function () {
+    var c = BYK[cur]; if (!c) return;
+    var r = rows(c); if (!r.length) { toast('Nothing to export'); return; }
+    var keys = ['createdAt']; r.forEach(function (d) { Object.keys(d).forEach(function (k) { if (k !== 'id' && keys.indexOf(k) < 0) keys.push(k); }); });
+    function cell(k, d) {
+      var v = k === 'createdAt' ? ts(d).toISOString() : d[k];
+      v = String(v == null ? '' : v);
+      if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; // neutralise spreadsheet formulas
+      return '"' + v.replace(/"/g, '""') + '"';
+    }
+    var out = [keys.join(',')].concat(r.map(function (d) { return keys.map(function (k) { return cell(k, d); }).join(','); })).join('\r\n');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + out], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'green-sparrow-' + c.k + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('Exported ' + r.length + ' rows');
+  };
+
+  /* ------------------------------------------------------- connection check */
+  function healthView() {
+    var rowsH = [];
+    rowsH.push({ ok: true, t: 'Firebase project', s: '<code>' + esc(GS_FIREBASE.projectId) + '</code> · ' + esc(GS_FIREBASE.authDomain) });
+    rowsH.push({ ok: !!user, t: 'Signed in', s: user ? esc(user.email) + '<br>UID <code>' + esc(user.uid) + '</code>' : 'Not signed in' });
+    rowsH.push({ ok: health.admin === true, t: 'Admin record', s: health.admin === true ? 'Found in <code>admins/' + esc(user && user.uid) + '</code>' : 'Missing: create it in Firestore → admins' });
+    COLS.forEach(function (c) {
+      var h = health.cols[c.k];
+      rowsH.push({ ok: h && !h.err, t: 'Collection: ' + c.k,
+        s: !h ? 'Waiting for first response…' : h.err ? 'Read failed [' + esc(h.err) + ']. Publish <code>firestore.rules</code>.' : data[c.k].length + ' document' + (data[c.k].length === 1 ? '' : 's') + ' · live listener active' });
+    });
+    $('chk').innerHTML = rowsH.map(function (r) {
+      return '<div class="' + (r.ok ? 'ok' : 'bad') + '"><span class="dot">' + (r.ok ? '✓' : '!') + '</span><div><b>' + r.t + '</b><small>' + r.s + '</small></div></div>';
+    }).join('');
+  }
+
+  /* ------------------------------------------------------------- live feed */
+  function setLive() {
+    var l = $('live'), errs = Object.keys(health.cols).some(function (k) { return health.cols[k].err; });
+    var got = Object.keys(health.cols).length;
+    l.className = 'live ' + (errs ? 'bad' : got ? 'on' : '');
+    l.textContent = errs ? 'Connection problem' : got ? 'Live' : 'Connecting…';
+  }
+  function listen() {
+    COLS.forEach(function (c) {
+      var first = true;
+      unsubs.push(db.collection(c.k).onSnapshot(function (sn) {
+        if (!first) sn.docChanges().forEach(function (ch) {
+          if (ch.type === 'added' && !ch.doc.metadata.hasPendingWrites) toast('🔔 New ' + c.one + ' received');
+        });
+        first = false;
+        health.cols[c.k] = { err: null };
+        data[c.k] = sn.docs.map(function (x) { return Object.assign({ id: x.id }, x.data({ serverTimestamps: 'estimate' })); }).sort(function (a, b) { return ts(b) - ts(a); });
+        if (openDoc && openDoc.k === c.k && !find(c.k, openDoc.id)) closeDrawer();
+        setLive(); schedule();
+      }, function (err) {
+        console.error('Firestore read failed (' + c.k + '):', err.code, err.message);
+        health.cols[c.k] = { err: err.code || 'error' };
+        setLive(); schedule();
+      }));
+    });
+  }
+
+  /* -------------------------------------------------------------- auth gate */
+  $('out').onclick = function () {
+    unsubs.forEach(function (u) { u(); }); unsubs = [];
+    auth.signOut().then(function () { location.replace('login.html'); });
+  };
+  auth.onAuthStateChanged(function (u) {
+    if (!u) { location.replace('login.html'); return; }
+    user = u;
+    db.doc('admins/' + u.uid).get().then(function (s) {
+      if (!s.exists) { health.admin = false; location.replace('login.html'); return; }   // login page explains what to do
+      health.admin = true;
+      $('who').textContent = u.email;
+      document.documentElement.style.visibility = '';
+      render(); listen();
+    }).catch(function (e) { console.error('Admin check failed:', e.code, e.message); location.replace('login.html'); });
+  });
+})();
+</script>
+</body>
+</html>
